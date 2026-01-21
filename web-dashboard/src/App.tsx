@@ -1,18 +1,38 @@
 import { useEffect, useState } from 'react';
-import { db } from './lib/firebase';
+import { db, auth } from './lib/firebase'; 
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import type { User } from 'firebase/auth';
 import { collection, addDoc, onSnapshot, query, orderBy } from 'firebase/firestore';
 import type { Task } from './types';
-import './App.css'; // Standard Vite CSS
+import './App.css';
 
 function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  
+  // App State
   const [tasks, setTasks] = useState<Task[]>([]);
   const [newTaskTitle, setNewTaskTitle] = useState('');
+  
+  // Login State
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
 
-  // 1. REAL-TIME LISTENER
+  // 1. MONITOR AUTH STATE
   useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // 2. MONITOR TASKS (Only if logged in)
+  useEffect(() => {
+    if (!user) return; // Don't fetch if not logged in
+
     const q = query(collection(db, "tasks"), orderBy("createdAt", "desc"));
-    
-    // onSnapshot is the magic: it triggers EVERY time the database changes
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const liveData = snapshot.docs.map(doc => ({
         id: doc.id,
@@ -20,29 +40,69 @@ function App() {
       })) as Task[];
       setTasks(liveData);
     });
-
     return () => unsubscribe();
-  }, []);
+  }, [user]);
 
-  // 2. CREATE FUNCTION
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (err: any) {
+      setError("Login failed: " + err.message);
+    }
+  };
+
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTaskTitle.trim()) return;
-
     await addDoc(collection(db, "tasks"), {
       title: newTaskTitle,
       status: 'PENDING',
       createdAt: Date.now()
     });
-
-    setNewTaskTitle(''); // Clear input
+    setNewTaskTitle('');
   };
 
+  if (loading) return <div>Loading...</div>;
+
+  // --- LOGIN VIEW ---
+  if (!user) {
+    return (
+      <div style={{ maxWidth: '400px', margin: '2rem auto', padding: '2rem', border: '1px solid #ccc', borderRadius: '8px' }}>
+        <h2>🔐 HQ Login</h2>
+        <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <input 
+            type="email" 
+            placeholder="Email" 
+            value={email} 
+            onChange={e => setEmail(e.target.value)} 
+            style={{ padding: '8px' }}
+          />
+          <input 
+            type="password" 
+            placeholder="Password" 
+            value={password} 
+            onChange={e => setPassword(e.target.value)} 
+            style={{ padding: '8px' }}
+          />
+          {error && <p style={{ color: 'red', fontSize: '0.9rem' }}>{error}</p>}
+          <button type="submit" style={{ padding: '10px' }}>Sign In</button>
+        </form>
+        <p style={{ fontSize: '0.8rem', marginTop: '10px', color: '#666' }}>
+          (Create a user in Firebase Console or use: admin@hq.com / 123456)
+        </p>
+      </div>
+    );
+  }
+
+  // --- DASHBOARD VIEW ---
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto', padding: '2rem' }}>
-      <h1>🚁 Field Ops Dispatch</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+        <h1>🚁 Field Ops Dispatch</h1>
+        <button onClick={() => signOut(auth)} style={{ padding: '5px 10px', fontSize: '0.8rem' }}>Sign Out</button>
+      </div>
       
-      {/* Input Form */}
       <form onSubmit={handleCreateTask} style={{ display: 'flex', gap: '10px', marginBottom: '2rem' }}>
         <input 
           type="text" 
@@ -54,7 +114,6 @@ function App() {
         <button type="submit" style={{ padding: '10px 20px' }}>Dispatch</button>
       </form>
 
-      {/* Live List */}
       <div className="task-list">
         {tasks.map(task => (
           <div key={task.id} style={{ 
