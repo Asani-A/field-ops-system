@@ -1,8 +1,13 @@
 import { initializeApp } from "firebase/app";
-// specialized import for React Native auth persistence
-import { initializeAuth, getReactNativePersistence } from "firebase/auth";
+import { 
+  initializeAuth, 
+  getReactNativePersistence, 
+  browserLocalPersistence, 
+  Auth 
+} from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_API_KEY,
@@ -16,9 +21,20 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize Auth with persistence (so user stays logged in)
-export const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(ReactNativeAsyncStorage)
-});
+// Initialize Auth conditionally based on Platform
+let auth: Auth;
 
+if (Platform.OS === 'web') {
+  // If running in browser (Expo Web), use standard browser storage
+  auth = initializeAuth(app, {
+    persistence: browserLocalPersistence
+  });
+} else {
+  // If running on iOS/Android, use Native Async Storage
+  auth = initializeAuth(app, {
+    persistence: getReactNativePersistence(ReactNativeAsyncStorage)
+  });
+}
+
+export { auth };
 export const db = getFirestore(app);
