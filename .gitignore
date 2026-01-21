@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Build Outputs
+dist/
+web-build/
+.expo/
+
+# OS Junk
+.DS_Store
+Thumbs.db
+
+# SECRETS (Crucial)
+.env
+.env.local
+*.env*
